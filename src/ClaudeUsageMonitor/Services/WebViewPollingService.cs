@@ -257,6 +257,30 @@ public class WebViewPollingService : IDisposable
     {
         try
         {
+            var cachePath = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ClaudeUsageMonitor", "usage_cache.json");
+
+            // 既存のBillingType/RateLimitTier/PlanTypeを保持（使用量APIはこれらを返さないため）
+            string billingType = "stripe_subscription";
+            string rateLimitTier = "";
+            string planType = "";
+            if (System.IO.File.Exists(cachePath))
+            {
+                try
+                {
+                    var existing = System.Text.Json.JsonDocument.Parse(
+                        System.IO.File.ReadAllText(cachePath));
+                    if (existing.RootElement.TryGetProperty("BillingType", out var bt))
+                        billingType = bt.GetString() ?? billingType;
+                    if (existing.RootElement.TryGetProperty("RateLimitTier", out var rt))
+                        rateLimitTier = rt.GetString() ?? rateLimitTier;
+                    if (existing.RootElement.TryGetProperty("PlanType", out var pt))
+                        planType = pt.GetString() ?? planType;
+                }
+                catch { }
+            }
+
             var cache = new
             {
                 Utilization = usage.FiveHourUtilization,
@@ -264,15 +288,13 @@ public class WebViewPollingService : IDisposable
                 WeeklyUtilization = usage.WeeklyUtilization,
                 WeeklyResetsAt = usage.WeeklyResetsAt?.ToString("o"),
                 SonnetUtilization = usage.SonnetUtilization,
-                BillingType = "stripe_subscription", // Keep existing
-                RateLimitTier = "claude_max",
+                BillingType = billingType,
+                RateLimitTier = rateLimitTier,
+                PlanType = planType,
                 FetchedAt = DateTime.UtcNow.ToString("o")
             };
-            
+
             var cacheJson = System.Text.Json.JsonSerializer.Serialize(cache);
-            var cachePath = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "ClaudeUsageMonitor", "usage_cache.json");
             System.IO.File.WriteAllText(cachePath, cacheJson);
         }
         catch (Exception ex)
