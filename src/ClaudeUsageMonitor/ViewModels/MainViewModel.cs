@@ -120,16 +120,17 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 resetsAt = DateTime.Parse(resetsAtElem.GetString() ?? "");
             }
             
-            // Load plan info
-            if (cache.RootElement.TryGetProperty("BillingType", out var billingElem))
+            // Load plan info - PlanType (from capabilities) takes precedence over RateLimitTier
+            if (cache.RootElement.TryGetProperty("PlanType", out var planTypeElem) &&
+                !string.IsNullOrEmpty(planTypeElem.GetString()))
+            {
+                var info = new SubscriptionInfo { PlanType = planTypeElem.GetString()! };
+                PlanText = info.DisplayName;
+            }
+            else if (cache.RootElement.TryGetProperty("BillingType", out var billingElem))
             {
                 var billingType = billingElem.GetString() ?? "unknown";
-                var rateLimitTier = "";
-                if (cache.RootElement.TryGetProperty("RateLimitTier", out var tierElem))
-                {
-                    rateLimitTier = tierElem.GetString() ?? "";
-                }
-                PlanText = GetPlanDisplayName(billingType, rateLimitTier);
+                PlanText = billingType == "stripe_subscription" ? "Pro" : billingType;
             }
             
             // Update UI with cached data - 5-hour limit

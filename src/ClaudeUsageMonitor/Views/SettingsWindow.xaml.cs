@@ -116,6 +116,7 @@ public partial class SettingsWindow : Window
             OrganizationComboBox.SelectedItem = org;
             
             // Cache usage and plan data from WebView2
+            var planType = DeterminePlanType(loginWindow.Capabilities);
             var usageCache = new
             {
                 Utilization = loginWindow.UsagePercent ?? 0,
@@ -125,6 +126,7 @@ public partial class SettingsWindow : Window
                 SonnetUtilization = loginWindow.SonnetUsagePercent ?? 0,
                 BillingType = loginWindow.BillingType ?? "unknown",
                 RateLimitTier = loginWindow.RateLimitTier ?? "unknown",
+                PlanType = planType,
                 FetchedAt = DateTime.UtcNow.ToString("o")
             };
             var cacheJson = System.Text.Json.JsonSerializer.Serialize(usageCache);
@@ -283,6 +285,16 @@ public partial class SettingsWindow : Window
 
         CredentialsSaved?.Invoke();
         Close();
+    }
+
+    private static string DeterminePlanType(List<string>? capabilities)
+    {
+        if (capabilities == null) return "claude_pro";
+        if (capabilities.Contains("claude_max_20x")) return "claude_max_20x";
+        if (capabilities.Contains("claude_max_5x")) return "claude_max_5x";
+        if (capabilities.Contains("claude_team")) return "claude_team";
+        if (capabilities.Contains("claude_pro")) return "claude_pro";
+        return "free";
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)
