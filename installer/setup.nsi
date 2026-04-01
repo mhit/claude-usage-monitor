@@ -10,7 +10,7 @@
 !define DESCRIPTION "Claude.ai 使用状況モニター"
 !define VERSIONMAJOR 1
 !define VERSIONMINOR 0
-!define VERSIONBUILD 0
+!define VERSIONBUILD 1
 !define HELPURL "https://github.com/mhit/claude-usage-monitor"
 !define ABOUTURL "https://github.com/mhit/claude-usage-monitor"
 

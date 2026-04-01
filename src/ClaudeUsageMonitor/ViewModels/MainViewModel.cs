@@ -196,8 +196,9 @@ public partial class MainViewModel : ObservableObject, IDisposable
 
     private static string GetPlanDisplayName(string billingType, string rateLimitTier)
     {
-        if (rateLimitTier.Contains("claude_max"))
-            return "Claude Max";
+        if (rateLimitTier.Contains("20x")) return "Max 20x";
+        if (rateLimitTier.Contains("5x")) return "Max 5x";
+        if (rateLimitTier.Contains("claude_max")) return "Max";
         if (billingType == "stripe_subscription")
             return "Pro";
         if (billingType == "prepaid")
