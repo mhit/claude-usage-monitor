@@ -54,6 +54,12 @@ jobs:
           "minor=$minor" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "build=$build" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append
+
       - name: Build NSIS installer
         working-directory: installer
         shell: pwsh
