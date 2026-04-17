@@ -1,0 +1,88 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*.*.*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore src/ClaudeUsageMonitor/ClaudeUsageMonitor.csproj
+
+      - name: Build
+        run: dotnet build src/ClaudeUsageMonitor/ClaudeUsageMonitor.csproj -c Release --no-restore
+
+      - name: Publish (self-contained win-x64)
+        run: >
+          dotnet publish src/ClaudeUsageMonitor/ClaudeUsageMonitor.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=false
+          -o installer/build
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
+            $tag = $env:GITHUB_REF -replace '^refs/tags/v',''
+          } else {
+            $tag = '0.0.0'
+          }
+          $parts = $tag.Split('.')
+          $major = if ($parts.Length -ge 1) { $parts[0] } else { '0' }
+          $minor = if ($parts.Length -ge 2) { $parts[1] } else { '0' }
+          $build = if ($parts.Length -ge 3) { $parts[2] } else { '0' }
+          "tag=$tag"     | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "major=$major" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "minor=$minor" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "build=$build" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append
+
+      - name: Build NSIS installer
+        working-directory: installer
+        shell: pwsh
+        run: |
+          & makensis `
+            "/DVERSIONMAJOR=${{ steps.ver.outputs.major }}" `
+            "/DVERSIONMINOR=${{ steps.ver.outputs.minor }}" `
+            "/DVERSIONBUILD=${{ steps.ver.outputs.build }}" `
+            setup.nsi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClaudeUsageMonitor-Setup-${{ steps.ver.outputs.tag }}
+          path: installer/ClaudeUsageMonitor-Setup-*.exe
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/ClaudeUsageMonitor-Setup-*.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false
