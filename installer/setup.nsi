@@ -8,9 +8,15 @@
 !define APPNAME "Claude Usage Monitor"
 !define COMPANYNAME "mhit"
 !define DESCRIPTION "Claude.ai 使用状況モニター"
-!define VERSIONMAJOR 1
-!define VERSIONMINOR 0
-!define VERSIONBUILD 1
+!ifndef VERSIONMAJOR
+  !define VERSIONMAJOR 1
+!endif
+!ifndef VERSIONMINOR
+  !define VERSIONMINOR 0
+!endif
+!ifndef VERSIONBUILD
+  !define VERSIONBUILD 1
+!endif
 !define HELPURL "https://github.com/mhit/claude-usage-monitor"
 !define ABOUTURL "https://github.com/mhit/claude-usage-monitor"
 
