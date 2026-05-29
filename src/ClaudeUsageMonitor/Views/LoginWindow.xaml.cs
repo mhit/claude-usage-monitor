@@ -12,6 +12,7 @@ public partial class LoginWindow : Window
     public string? OrganizationName { get; private set; }
     public string? BillingType { get; private set; }
     public string? RateLimitTier { get; private set; }
+    public List<string>? Capabilities { get; private set; }
     public int? UsagePercent { get; private set; }
     public DateTime? UsageResetsAt { get; private set; }
     public int? WeeklyUsagePercent { get; private set; }
@@ -172,6 +173,7 @@ public partial class LoginWindow : Window
                 OrganizationName = orgs[0].name ?? orgs[0].uuid;
                 BillingType = orgs[0].billing_type;
                 RateLimitTier = orgs[0].rate_limit_tier;
+                Capabilities = orgs[0].capabilities;
                 Logger.Log("LoginWindow", $"Org found: {OrganizationId} ({OrganizationName}), billing: {BillingType}, tier: {RateLimitTier}");
                 StatusText.Text = $"組織取得成功... 使用量を取得中...";
                 
@@ -447,5 +449,6 @@ public partial class LoginWindow : Window
         public string? name { get; set; }
         public string? billing_type { get; set; }
         public string? rate_limit_tier { get; set; }
+        public List<string>? capabilities { get; set; }
     }
 }
