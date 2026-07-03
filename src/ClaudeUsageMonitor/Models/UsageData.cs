@@ -48,8 +48,8 @@ public record UsageData
     /// </summary>
     public UsageLevel Level => Utilization switch
     {
-        < 50 => UsageLevel.Safe,
-        < 80 => UsageLevel.Moderate,
+        < 70 => UsageLevel.Safe,
+        < 90 => UsageLevel.Moderate,
         _ => UsageLevel.Critical
     };
 
@@ -67,7 +67,7 @@ public record UsageData
 
 public enum UsageLevel
 {
-    Safe,       // 0-49%  - Green
-    Moderate,   // 50-79% - Orange
-    Critical    // 80-100% - Red
+    Safe,       // 0-69%  - Green
+    Moderate,   // 70-89% - Orange
+    Critical    // 90-100% - Red
 }

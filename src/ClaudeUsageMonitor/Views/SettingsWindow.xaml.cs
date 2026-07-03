@@ -116,14 +116,15 @@ public partial class SettingsWindow : Window
             OrganizationComboBox.SelectedItem = org;
             
             // Cache usage and plan data from WebView2
-            var planType = DeterminePlanType(loginWindow.Capabilities);
+            var planType = DeterminePlanType(loginWindow.Capabilities, loginWindow.RateLimitTier);
             var usageCache = new
             {
                 Utilization = loginWindow.UsagePercent ?? 0,
                 ResetsAt = loginWindow.UsageResetsAt?.ToString("o"),
                 WeeklyUtilization = loginWindow.WeeklyUsagePercent ?? 0,
                 WeeklyResetsAt = loginWindow.WeeklyResetsAt?.ToString("o"),
-                SonnetUtilization = loginWindow.SonnetUsagePercent ?? 0,
+                // nullのまま保存 → 従量課金移行後の再ログインで0%の死にゲージを出さない
+                FableUtilization = loginWindow.FableUsagePercent,
                 BillingType = loginWindow.BillingType ?? "unknown",
                 RateLimitTier = loginWindow.RateLimitTier ?? "unknown",
                 PlanType = planType,
@@ -287,14 +288,42 @@ public partial class SettingsWindow : Window
         Close();
     }
 
-    private static string DeterminePlanType(List<string>? capabilities)
+    private static string DeterminePlanType(List<string>? capabilities, string? rateLimitTier = null)
     {
-        if (capabilities == null) return "claude_pro";
-        if (capabilities.Contains("claude_max_20x")) return "claude_max_20x";
-        if (capabilities.Contains("claude_max_5x")) return "claude_max_5x";
-        if (capabilities.Contains("claude_team")) return "claude_team";
-        if (capabilities.Contains("claude_pro")) return "claude_pro";
-        return "free";
+        // capabilities が具体的な階層名を持つ場合はそれを優先（旧仕様）
+        if (capabilities != null)
+        {
+            if (capabilities.Contains("claude_max_20x")) return "claude_max_20x";
+            if (capabilities.Contains("claude_max_5x")) return "claude_max_5x";
+            // 新仕様では capabilities は "claude_max" のみで 5x/20x の区別を持たないため
+            // rate_limit_tier から階層を判定する
+            if (capabilities.Contains("claude_max"))
+                return DetermineMaxTier(rateLimitTier);
+            if (capabilities.Contains("claude_team")) return "claude_team";
+            if (capabilities.Contains("claude_pro")) return "claude_pro";
+        }
+
+        // capabilities で判定できない場合は rate_limit_tier をフォールバックに使う
+        if (!string.IsNullOrEmpty(rateLimitTier))
+        {
+            if (rateLimitTier.Contains("20x")) return "claude_max_20x";
+            if (rateLimitTier.Contains("5x")) return "claude_max_5x";
+            if (rateLimitTier.Contains("claude_max")) return "claude_max";
+            if (rateLimitTier.Contains("team")) return "claude_team";
+            if (rateLimitTier.Contains("pro")) return "claude_pro";
+        }
+
+        return capabilities == null ? "claude_pro" : "free";
+    }
+
+    private static string DetermineMaxTier(string? rateLimitTier)
+    {
+        if (!string.IsNullOrEmpty(rateLimitTier))
+        {
+            if (rateLimitTier.Contains("20x")) return "claude_max_20x";
+            if (rateLimitTier.Contains("5x")) return "claude_max_5x";
+        }
+        return "claude_max";
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)

@@ -196,7 +196,7 @@ public class WebViewPollingService : IDisposable
                     SaveCache(usage);
                     UsageUpdated?.Invoke(this, usage);
                     StatusChanged?.Invoke(this, "接続済み");
-                    Logger.Log("WebViewPoll", $"Updated: 5h={usage.FiveHourUtilization}%, 7d={usage.WeeklyUtilization}%");
+                    Logger.Log("WebViewPoll", $"Updated: 5h={usage.FiveHourUtilization}%, 7d={usage.WeeklyUtilization}%, scoped={(usage.FableUtilization.HasValue ? $"{usage.FableLabel}:{usage.FableUtilization}%" : "なし")}");
                 }
             }
         }
@@ -211,6 +211,52 @@ public class WebViewPollingService : IDisposable
         }
     }
 
+    // モデル別週間制限(weekly_scoped)の使用率とモデル名を取得。
+    // 第一候補: limits配列の kind="weekly_scoped" エントリー(2026-07時点の形式)。ラベルは scope.model.display_name。
+    // フォールバック: 旧形式の seven_day_fable / seven_day_mythos キー。
+    // 2026-07-08以降はFableが従量課金(usage credits)に移行し、エントリー自体が消える想定。
+    // その場合はnullを返し、UI側はゲージ行ごと非表示にする。
+    private static (string? Label, int Percent)? FindScopedWeeklyLimit(System.Text.Json.JsonElement root)
+    {
+        if (root.TryGetProperty("limits", out var limits) &&
+            limits.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            foreach (var entry in limits.EnumerateArray())
+            {
+                if (entry.TryGetProperty("kind", out var kind) &&
+                    kind.GetString() == "weekly_scoped" &&
+                    entry.TryGetProperty("percent", out var pct) &&
+                    pct.ValueKind == System.Text.Json.JsonValueKind.Number)
+                {
+                    string? label = null;
+                    if (entry.TryGetProperty("scope", out var scope) &&
+                        scope.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                        scope.TryGetProperty("model", out var model) &&
+                        model.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                        model.TryGetProperty("display_name", out var dn) &&
+                        dn.ValueKind == System.Text.Json.JsonValueKind.String)
+                    {
+                        label = dn.GetString();
+                    }
+                    return (label, (int)pct.GetDouble());
+                }
+            }
+            return null;
+        }
+
+        foreach (var key in new[] { "seven_day_fable", "seven_day_mythos" })
+        {
+            if (root.TryGetProperty(key, out var el) &&
+                el.ValueKind == System.Text.Json.JsonValueKind.Object &&
+                el.TryGetProperty("utilization", out var u) &&
+                u.ValueKind == System.Text.Json.JsonValueKind.Number)
+            {
+                return (key == "seven_day_mythos" ? "Mythos" : "Fable", (int)u.GetDouble());
+            }
+        }
+        return null;
+    }
+
     private UsageDataFull? ParseUsage(string json)
     {
         try
@@ -219,7 +265,7 @@ public class WebViewPollingService : IDisposable
             var root = doc.RootElement;
             
             var usage = new UsageDataFull();
-            
+
             if (root.TryGetProperty("five_hour", out var fiveHour) && fiveHour.ValueKind != System.Text.Json.JsonValueKind.Null)
             {
                 usage.FiveHourUtilization = (int)fiveHour.GetProperty("utilization").GetDouble();
@@ -238,11 +284,19 @@ public class WebViewPollingService : IDisposable
                 }
             }
             
-            if (root.TryGetProperty("seven_day_sonnet", out var sonnet) && sonnet.ValueKind != System.Text.Json.JsonValueKind.Null)
+            // 7/8の従量課金移行後にlimits配列へ新形式(credits等)が来た場合に備え、生JSONを毎回記録する
+            if (root.TryGetProperty("limits", out var limitsRaw))
             {
-                usage.SonnetUtilization = (int)sonnet.GetProperty("utilization").GetDouble();
+                Logger.Log("WebViewPoll", $"limits raw: {limitsRaw.GetRawText()}");
             }
-            
+
+            var scoped = FindScopedWeeklyLimit(root);
+            if (scoped.HasValue)
+            {
+                usage.FableUtilization = scoped.Value.Percent;
+                usage.FableLabel = scoped.Value.Label ?? "Fable";
+            }
+
             usage.FetchedAt = DateTime.UtcNow;
             return usage;
         }
@@ -287,7 +341,8 @@ public class WebViewPollingService : IDisposable
                 ResetsAt = usage.FiveHourResetsAt?.ToString("o"),
                 WeeklyUtilization = usage.WeeklyUtilization,
                 WeeklyResetsAt = usage.WeeklyResetsAt?.ToString("o"),
-                SonnetUtilization = usage.SonnetUtilization,
+                FableUtilization = usage.FableUtilization,
+                FableLabel = usage.FableLabel,
                 BillingType = billingType,
                 RateLimitTier = rateLimitTier,
                 PlanType = planType,
@@ -317,6 +372,8 @@ public class UsageDataFull
     public DateTime? FiveHourResetsAt { get; set; }
     public int WeeklyUtilization { get; set; }
     public DateTime? WeeklyResetsAt { get; set; }
-    public int SonnetUtilization { get; set; }
+    // null = APIがモデル別週間制限を返していない(従量課金移行後など) → ゲージ非表示
+    public int? FableUtilization { get; set; }
+    public string? FableLabel { get; set; }
     public DateTime FetchedAt { get; set; }
 }

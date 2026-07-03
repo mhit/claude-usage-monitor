@@ -36,12 +36,18 @@ public partial class MainViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _weeklyResetText = "";
 
-    // Sonnet limit
+    // モデル別週間制限 (Fable等)。APIが返さなくなったら行ごと非表示にする
     [ObservableProperty]
-    private int _sonnetUtilization;
+    private int _fableUtilization;
 
     [ObservableProperty]
-    private string _sonnetUtilizationText = "0%";
+    private string _fableUtilizationText = "0%";
+
+    [ObservableProperty]
+    private string _fableLabel = "📖 Fable制限 (週間)";
+
+    [ObservableProperty]
+    private Visibility _fableVisibility = Visibility.Collapsed;
 
     [ObservableProperty]
     private string _lastUpdateText = "未取得";
@@ -120,17 +126,27 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 resetsAt = DateTime.Parse(resetsAtElem.GetString() ?? "");
             }
             
-            // Load plan info - PlanType (from capabilities) takes precedence over RateLimitTier
-            if (cache.RootElement.TryGetProperty("PlanType", out var planTypeElem) &&
-                !string.IsNullOrEmpty(planTypeElem.GetString()))
+            // Load plan info - PlanType (from capabilities) takes precedence over RateLimitTier.
+            // ただし PlanType が "free"/空の場合は、claude.ai の capabilities 仕様変更で
+            // 階層が判定できていない可能性があるため、RateLimitTier を信頼してフォールバックする。
+            var rateLimitTier = cache.RootElement.TryGetProperty("RateLimitTier", out var rtElem)
+                ? rtElem.GetString() ?? "" : "";
+            var billingType = cache.RootElement.TryGetProperty("BillingType", out var billingElem)
+                ? billingElem.GetString() ?? "unknown" : "unknown";
+            var planType = cache.RootElement.TryGetProperty("PlanType", out var planTypeElem)
+                ? planTypeElem.GetString() ?? "" : "";
+
+            if (!string.IsNullOrEmpty(planType) && planType != "free")
             {
-                var info = new SubscriptionInfo { PlanType = planTypeElem.GetString()! };
-                PlanText = info.DisplayName;
+                PlanText = new SubscriptionInfo { PlanType = planType }.DisplayName;
             }
-            else if (cache.RootElement.TryGetProperty("BillingType", out var billingElem))
+            else
             {
-                var billingType = billingElem.GetString() ?? "unknown";
-                PlanText = billingType == "stripe_subscription" ? "Pro" : billingType;
+                // RateLimitTier から有料プランを判定（取れなければ PlanType/BillingType に戻る）
+                var fromTier = GetPlanDisplayName(billingType, rateLimitTier);
+                PlanText = fromTier == billingType && !string.IsNullOrEmpty(planType)
+                    ? new SubscriptionInfo { PlanType = planType }.DisplayName
+                    : fromTier;
             }
             
             // Update UI with cached data - 5-hour limit
@@ -168,12 +184,24 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 }
             }
             
-            // Sonnet limit
-            if (cache.RootElement.TryGetProperty("SonnetUtilization", out var sonnetElem))
+            // モデル別週間制限 (キャッシュにnullが入っている場合は従量課金移行後とみなし非表示)
+            if (cache.RootElement.TryGetProperty("FableUtilization", out var fableElem) &&
+                fableElem.ValueKind == System.Text.Json.JsonValueKind.Number)
             {
-                var sonnet = sonnetElem.GetInt32();
-                SonnetUtilization = sonnet;
-                SonnetUtilizationText = $"{sonnet}%";
+                var fable = fableElem.GetInt32();
+                FableUtilization = fable;
+                FableUtilizationText = $"{fable}%";
+                if (cache.RootElement.TryGetProperty("FableLabel", out var labelElem) &&
+                    labelElem.ValueKind == System.Text.Json.JsonValueKind.String &&
+                    !string.IsNullOrEmpty(labelElem.GetString()))
+                {
+                    FableLabel = $"📖 {labelElem.GetString()}制限 (週間)";
+                }
+                FableVisibility = Visibility.Visible;
+            }
+            else
+            {
+                FableVisibility = Visibility.Collapsed;
             }
             
             LastUpdateText = $"{fetchedAt.ToLocalTime():HH:mm:ss}";
@@ -181,8 +209,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             // Determine level
             CurrentLevel = utilization switch
             {
-                >= 80 => UsageLevel.Critical,
-                >= 50 => UsageLevel.Moderate,
+                >= 90 => UsageLevel.Critical,
+                >= 70 => UsageLevel.Moderate,
                 _ => UsageLevel.Safe
             };
             
@@ -266,8 +294,8 @@ public partial class MainViewModel : ObservableObject, IDisposable
             }
             CurrentLevel = data.FiveHourUtilization switch
             {
-                >= 80 => UsageLevel.Critical,
-                >= 50 => UsageLevel.Moderate,
+                >= 90 => UsageLevel.Critical,
+                >= 70 => UsageLevel.Moderate,
                 _ => UsageLevel.Safe
             };
 
@@ -279,9 +307,21 @@ public partial class MainViewModel : ObservableObject, IDisposable
                 WeeklyResetText = data.WeeklyResetsAt.Value.ToLocalTime().ToString("M/d HH:mm");
             }
 
-            // Sonnet
-            SonnetUtilization = data.SonnetUtilization;
-            SonnetUtilizationText = $"{data.SonnetUtilization}%";
+            // モデル別週間制限 (APIから消えたら非表示)
+            if (data.FableUtilization.HasValue)
+            {
+                FableUtilization = data.FableUtilization.Value;
+                FableUtilizationText = $"{data.FableUtilization.Value}%";
+                if (!string.IsNullOrEmpty(data.FableLabel))
+                {
+                    FableLabel = $"📖 {data.FableLabel}制限 (週間)";
+                }
+                FableVisibility = Visibility.Visible;
+            }
+            else
+            {
+                FableVisibility = Visibility.Collapsed;
+            }
 
             LastUpdateText = DateTime.Now.ToString("HH:mm:ss");
         });

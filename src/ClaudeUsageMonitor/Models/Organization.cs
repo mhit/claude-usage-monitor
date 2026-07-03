@@ -24,6 +24,7 @@ public record SubscriptionInfo
         "claude_team" => "Team",
         "claude_max_5x" => "Max 5x",
         "claude_max_20x" => "Max 20x",
+        "claude_max" => "Max",
         "free" => "Free",
         _ => PlanType
     };

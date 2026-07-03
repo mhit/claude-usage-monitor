@@ -17,7 +17,7 @@ public partial class LoginWindow : Window
     public DateTime? UsageResetsAt { get; private set; }
     public int? WeeklyUsagePercent { get; private set; }
     public DateTime? WeeklyResetsAt { get; private set; }
-    public int? SonnetUsagePercent { get; private set; }
+    public int? FableUsagePercent { get; private set; }
     public bool LoginSuccessful => !string.IsNullOrEmpty(SessionKey) && !string.IsNullOrEmpty(OrganizationId);
 
     private DispatcherTimer? _cookiePollingTimer;
@@ -243,13 +243,17 @@ public partial class LoginWindow : Window
                     }
                 }
                 
-                // Sonnet limit
-                if (usage?.seven_day_sonnet != null)
+                // Fable limit (キー名候補 + 未知キーはWebViewPollingServiceの次回ポーリングで補完)
+                if (usage?.seven_day_fable != null)
                 {
-                    SonnetUsagePercent = (int)usage.seven_day_sonnet.utilization;
+                    FableUsagePercent = (int)usage.seven_day_fable.utilization;
                 }
-                
-                Logger.Log("LoginWindow", $"Usage: 5h={UsagePercent}%, 7d={WeeklyUsagePercent}%, sonnet={SonnetUsagePercent}%");
+                else if (usage?.seven_day_mythos != null)
+                {
+                    FableUsagePercent = (int)usage.seven_day_mythos.utilization;
+                }
+
+                Logger.Log("LoginWindow", $"Usage: 5h={UsagePercent}%, 7d={WeeklyUsagePercent}%, fable={FableUsagePercent}%");
                 StatusText.Text = $"✓ 取得成功: {OrganizationName} ({UsagePercent}%)";
             }
             else
@@ -277,7 +281,8 @@ public partial class LoginWindow : Window
     {
         public UsageTier? five_hour { get; set; }
         public UsageTier? seven_day { get; set; }
-        public UsageTier? seven_day_sonnet { get; set; }
+        public UsageTier? seven_day_fable { get; set; }
+        public UsageTier? seven_day_mythos { get; set; }
     }
     
     private class UsageTier
